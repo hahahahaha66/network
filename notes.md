@@ -92,6 +92,14 @@ how 一系列参数
     #include <sys/socket.h>
 
     ssize_t recv(int sockfd,void* buffer,size_t length)
+    ssize_t send(int fd, const void *buf, size_t n, int flags);
+
+### 获取套接字地址
+    #include <sys/socket.h>
+    //获取本地套接字绑定的地址和端口
+    int getsockname(int sockfd, struct sockaddr* addr,socklen_t* addrlen);
+    //获取对端套接字的地址和端口
+    int getpeername(int sockfd, struct sockaddr* addr,socklen_t* addrlen);
 
 网络字节序是大端序（高位字节在低位内存，低位字节在高位内存），而inter和amd等cpu（主机字节序）使用的是小端序（与大端序相反），为了更好的通信，就需要有一些函数来转换
 |函数             |作用           |字节数          |
@@ -131,6 +139,25 @@ socket地址通常存在sockaddr中，由此又生出sockaddr_in sockaddr_in6来
 
 ### DNS域名系统
 为了更好的管理越来越多的主机，设计了DNS来解决这个问题，将ip映射到每个域名上，更方便用户访问，而域名通过DNS解析成ip地址，供电脑使用，DNS解析具体可分为递归和迭代
+
 ![迭代](2.png)
 
 递归则是由本地服务器开始，依次迭代每一台其他服务器进行查询
+
+### TCP工作流程
+
+
+![三次握手](4.png)
+
+
+1. 客户端向服务器发送一个SYN报文，包含自己的序列号，后处于<SYN_SENT>状态，此时是堵塞状态，服务器端保持<LISTEN>状态，也是阻塞状态，等待请求
+2. 在收到客户端发来的请求后，先确认SYN报文，无误后，返回自己的初始序列号以及设定了SYN和ACK控制位的报文后，处于<SYN_RECV>状态
+3. 客户端收到服务器的报文后，再次发送ACK报文包含服务端的序列号来确认服务器端的SYN报文，后双方处于数据传输状态<ESTABLISHED>
+
+
+
+![四次挥手](5.png)
+1. 客户端执行主动关闭，发送FIN报文给服务器，后处于<FIN_WAITI>
+2. 服务器收到FIN报文后返回ACK报文作为响应,后处于<CLOSE_WAITI>
+3. 服务器关闭己方连接，发送FIN报文到客户端,后处于<LAST_ACK>,客户端处于<TIME_WAIE2>
+4. 客户端发送ACK响应，来确认服务器端发来的FIN报文,此时处于<TIME_WAIT>，服务器端关闭
