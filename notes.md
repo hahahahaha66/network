@@ -9,7 +9,7 @@
 
 ![工作流程](./1.png)
 
-#### socket
+### socket
     #include <sys/types.h>
     #include <sys/socket.h>
 
@@ -32,7 +32,7 @@ tpye,表示套接字的传输方式，常见的有
 
 protocol通常为0
 socket返回值为新建的socket的套接字描述符，返回值为-1时表示失败
-#### bind
+### bind
     #include <sys/types.h>
     #include <sys/socket.h>
     #include <netinet/in.h>
@@ -49,7 +49,7 @@ addr是指向结构体sockaddr的指针，sockaddr具体为
 
 addrlen指定结构体的大小
 
-#### listen
+### listen
     #include<sys/socket.h>
 
     int liste(int sockfd,int backlog);
@@ -59,7 +59,7 @@ backlog控制等待连接的队列的大小，设定已完成连接的队列的�
 
 成功返回0,失败返回-1
 
-#### accept
+### accept
     #include <sys/socket.h>
 
     int accept(int sockfd,struct sockaddr* addr,socklen_t*addrlen);
@@ -71,13 +71,66 @@ backlog控制等待连接的队列的大小，设定已完成连接的队列的�
 
 原来的socket是监听套接字，只能用于连接，新的socket是专门用于通信的
 
-#### connect
+### connect
     #include <sys/socket.h>
     int connect(int sockfd, const stuct socksddr *addr,socklen_t addrlen);
 参数基本与accept相同，功能也类似
 
 注意，当客户端连接服务端失败后，需要重新建立一个socket来再次尝试连接
 
-#### close
+### close
 终止连接，可以将引用了socket的文件描述符都用close关闭，连接就会终止
 
+### shutdown
+    #include <sys/socket.h>
+    int shutdown(int sockfd,int how)
+关闭套接字通道
+sockfd socket套接字
+how 一系列参数
+
+### 专用于套接字的系统I/O调用
+    #include <sys/socket.h>
+
+    ssize_t recv(int sockfd,void* buffer,size_t length)
+
+网络字节序是大端序（高位字节在低位内存，低位字节在高位内存），而inter和amd等cpu（主机字节序）使用的是小端序（与大端序相反），为了更好的通信，就需要有一些函数来转换
+|函数             |作用           |字节数          |
+|-----------------|---------------|----------------|
+|htons            |主机->网络     |2               |
+|htonl            |主机->网络     |4               |
+|ntohs            |网络->主机     |2               |
+|ntohl            |网络->主机     |4               |
+
+### socket地址
+socket地址通常存在sockaddr中，由此又生出sockaddr_in sockaddr_in6来分别对应IPv4和IPv6,以更详细的提供地址信息，与此同时，二者也可以通过强制转换为sockaddr*来填入不同的函数需求
+
+    struct sockaddr {
+        sa_family_t sa_family;  // 地址族（AF_INET / AF_INET6）
+        char sa_data[14];       // 地址数据（长度固定为 14 字节）
+    };
+***
+    #include <netinet/in.h>
+
+    struct sockaddr_in {
+        sa_family_t    sin_family;   // 地址族，必须设为 AF_INET（IPv4）
+        in_port_t      sin_port;     // 端口号（需要使用 htons() 转换）
+        struct in_addr sin_addr;     // IPv4 地址（网络字节序）
+        char           sin_zero[8];  // 保留字段，通常填 0
+    };
+***
+    #include <netinet/in.h>
+
+    struct sockaddr_in6 {
+        sa_family_t     sin6_family;    // 地址族，必须设为 AF_INET6（IPv6）
+        in_port_t       sin6_port;      // 端口号（需要使用 htons() 转换）
+        uint32_t        sin6_flowinfo;  // 流信息（通常设为 0）
+        struct in6_addr sin6_addr;      // IPv6 地址（网络字节序）
+        uint32_t        sin6_scope_id;  // 作用域 ID（仅在链路本地地址中使用）
+    };
+其中比较重要的是struct in_addr 和 struct in6_addr表示地址（网络字节序）
+
+### DNS域名系统
+为了更好的管理越来越多的主机，设计了DNS来解决这个问题，将ip映射到每个域名上，更方便用户访问，而域名通过DNS解析成ip地址，供电脑使用，DNS解析具体可分为递归和迭代
+![迭代](2.png)
+
+递归则是由本地服务器开始，依次迭代每一台其他服务器进行查询
