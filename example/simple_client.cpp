@@ -46,7 +46,7 @@ int main(){
             printf("server disconnected.\n");
             break;
         }
-        printf("echo: %s",buffer);
+        //printf("echo: %s",buffer);
     }
 
     //关闭连接
