@@ -4,14 +4,14 @@
 
 //整数转换网络字节序（大小端的转换）
 
-//主机字节序转换成网络字节序
+//主机字节序（数字）转换成网络字节序
 uint16_t htons(uint16_t hostlong);
-//网络字节序转换成主机字节序
+//网络字节序转换成主机字节序（数字）
 uint16_t ntohs(uint16_t netshort);
 
-//32位下主机字节序转换成网络字节序
+//32位下主机字节序（数字）转换成网络字节序
 uint32_t htonl(uint32_t hostlong);
-//32位下网络字节序转换成主机字节序
+//32位下网络字节序转换成主机字节序（数字）
 uint32_t ntohl(uint32_t netlong);
 
 
@@ -21,6 +21,6 @@ uint32_t ntohl(uint32_t netlong);
 int inet_pton(int af, const char *__restrict cp, void *__restrict buf);
 
 //网络字节序转换字符串
-int inet_ntop(int af, const void *__restrict cp, char *__restrict buf, socklen_t len);
+//int inet_ntop(int af, const void *__restrict cp, char *__restrict buf, socklen_t len);
 
 
