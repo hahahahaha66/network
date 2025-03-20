@@ -29,21 +29,42 @@ void set_unlocking(int fd) {
     }
 }
 
-void transferring_file(int file_port) {
+void transferring_file(int cliend_fd) {
     int file_fd=socket(AF_INET,SOCK_STREAM,0);
-    struct sockaddr_in file_addr;
-    file_addr.sin_port=htons(file_port);
-    inet_pton(AF_INET,IP,&file_addr.sin_addr);
-    file_addr.sin_family=AF_INET;
-    int i = bind(file_fd,(sockaddr*)&file_addr,sizeof(file_addr));
-    if(i == -1){
-        perror("bind failed");
+    if(file_fd == -1){
+        perror("socket failed");
         exit(EXIT_FAILURE);
     }
 
-    listen(file_fd,10);
+    random_device rd;
+    mt19937 gen(rd());
+    uniform_int_distribution<int> dis(1024,5000);
+
+    char pasv_resp[64];
+    struct sockaddr_in file_addr;
+    int file_port=0;
+    do {int file_port = dis(gen);
+        file_addr.sin_port=htons(file_port);
+        inet_pton(AF_INET,IP,&file_addr.sin_addr);
+        file_addr.sin_family=AF_INET;
+    } while(bind(file_fd,(sockaddr*)&file_addr,sizeof(file_addr) == -1));
+    snprintf(pasv_resp, sizeof(pasv_resp), "227 entering passive mode (192,168,1,1,%d,%d)\r\n",file_port/256,file_port%256);
+    send(cliend_fd,pasv_resp,strlen(pasv_resp),0);
+    
+
+    if(listen(file_fd,10) == -1) {
+        perror("listen failed");
+        close(file_fd);
+        exit(EXIT_FAILURE);
+    }
 
     int cliend_file = accept(file_fd,NULL,NULL);
+    if(cliend_file == -1) {
+        perror("accept failed");
+        close(file_fd);
+        exit(EXIT_FAILURE);
+    }
+
     set_unlocking(cliend_file);
 
     while(1) {
@@ -59,24 +80,22 @@ void transferring_file(int file_port) {
         }
         if(byte_received == -1){
             perror("recv failed");
+            close(cliend_fd);
         }
         cout<<"file received successfully"<<endl;
     }
+    close(file_fd);
 }
 
 void establish_session (int cliend_fd) {
-    char buffer[1024];
+    while(1){
+        char buffer[1024];
     int bytes = recv(cliend_fd,buffer,sizeof(buffer),0);
     if(bytes>0){
         send(cliend_fd,buffer,bytes,0);
         buffer[bytes]='\0';
         if(strcmp(buffer,"PASV")==0) {
-            random_device rd;
-            mt19937 gen(rd());
-            uniform_int_distribution<int> dis(1024,5000);
-            int file_port = dis(gen);
-            send(cliend_fd,&file_port,sizeof(file_port),0);
-            thread th(transferring_file,file_port);
+            thread th(transferring_file,cliend_fd);
             th.detach();
         }
         else {
@@ -86,6 +105,8 @@ void establish_session (int cliend_fd) {
     else {
         close(cliend_fd);
     }
+    }
+    
 }
 
 int main() {
@@ -116,7 +137,6 @@ int main() {
     ev.data.fd = socket_fd;
     if (epoll_ctl(epfd,EPOLL_CTL_ADD,socket_fd,&ev) ==-1) {
         perror("epoll_ctl failed");
-        exit(EXIT_FAILURE);
     }
 
     while(1){
@@ -124,10 +144,18 @@ int main() {
         for(int i = 0;i < nfds; i++){
             if(event[i].data.fd == socket_fd) {
                 int client_fd = accept(socket_fd,NULL,NULL);
+                if(client_fd == -1) {
+                    perror("accept failed");
+                    close(socket_fd);
+                    continue;
+                }
                 set_unlocking(client_fd);
                 ev.events = EPOLLIN | EPOLLET;
                 ev.data.fd = client_fd;
-                epoll_ctl(epfd,EPOLL_CTL_ADD,client_fd,&ev);
+                if(epoll_ctl(epfd,EPOLL_CTL_ADD,client_fd,&ev) == -1) {
+                    perror("epoll_ctl failed");
+                    close(client_fd);
+                }
             }
             else{
                 thread th(establish_session,event[i].data.fd );
