@@ -161,3 +161,19 @@ socket地址通常存在sockaddr中，由此又生出sockaddr_in sockaddr_in6来
 2. 服务器收到FIN报文后返回ACK报文作为响应,后处于<CLOSE_WAIT>，客户端进入<FIN_WAIE2>状态等待服务器的FIN
 3. 服务器关闭己方连接，发送FIN报文到客户端,后处于<LAST_ACK>,客户端处于收到FIN后，进入<TIME_WAIT>状态
 4. 客户端发送ACK响应，来确认服务器端发来的FIN报文,继续保持<TIME_WAIT>（确保ACK正确接受），服务器收到ACK后，服务器端关闭进入<CLOSED>状态
+
+
+
+### 阻塞与非阻塞
+在网络编程中的，默认的socket套接字是**阻塞**的，这意味着当调用某个函数时，如果函数当前条件不能满足，进程或线程就会一直阻塞在这里，不会继续向下进行，同时非阻塞则恰恰相反，如果当前函数不满足某一条件，函数就会立即返回，进程也会继续向下运行
+先讲讲非阻塞的优势，也就是阻塞的坏处
++ 非阻塞可以提高并发能力
++ 避免线程或进程堵塞
++ 可以结合epoll提高i/o效率
+我们可以通过fcntl来设置为非阻塞模式
+
+    int server_fd=socket(AF_INET,SOCK_STREAM,0);
+    int flags=fcntl(server_fd,F_GETFL,0);
+    fcntl(server_fd,F_SETFL,flags | O_NONBLOCK);
+
+但是有好处也有坏处，使用非阻塞时recv,send,connect,accept等函数会有其他行为，需要进行合理地配置和处理，这也会导致代码的复杂度变高，bug更难发现

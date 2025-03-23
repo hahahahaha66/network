@@ -6,8 +6,7 @@
 #include <queue>
 #include <vector>
 #include <pthread.h>
-#include <iostream>
-#include <memory>
+
 
 const int MAX_NUM=12;
 

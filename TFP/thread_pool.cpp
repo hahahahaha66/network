@@ -1,5 +1,6 @@
 #include "thread_pool.hpp"
-
+#include <iostream>
+#include <memory>
 
 thread_pool::thread_pool() {
     pthread_mutex_init(&mutex, NULL);

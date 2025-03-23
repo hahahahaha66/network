@@ -18,7 +18,7 @@
 
 using namespace std;
 
-const char* IP="192.168.1.1";
+const char* IP="0.0.0.0";
 const int PORT=2100;
 const int MAX_EVENT=10;
  
@@ -90,21 +90,29 @@ void transferring_file(int cliend_fd) {
 void establish_session (int cliend_fd) {
     while(1){
         char buffer[1024];
-    int bytes = recv(cliend_fd,buffer,sizeof(buffer),0);
-    if(bytes>0){
-        send(cliend_fd,buffer,bytes,0);
-        buffer[bytes]='\0';
-        if(strcmp(buffer,"PASV")==0) {
-            thread th(transferring_file,cliend_fd);
-            th.detach();
+        int bytes = recv(cliend_fd,buffer,sizeof(buffer),0);
+        if(bytes>0){
+            send(cliend_fd,buffer,bytes,0);
+            buffer[bytes]='\0';
+            if(strcmp(buffer,"PASV")==0) {
+                thread th(transferring_file,cliend_fd);
+                th.detach();
+            }
+            else if(strcmp(buffer,"STOR")==0) {
+                thread th(transferring_file,cliend_fd);
+                th.detach();
+            }
+            else if(strcmp(buffer,"RETR")==0) {
+                thread th(transferring_file,cliend_fd);
+                th.detach();
+            }
+            else {
+                cout<<buffer<<endl;
+            }
         }
         else {
-            cout<<buffer<<endl;
+            close(cliend_fd);
         }
-    }
-    else {
-        close(cliend_fd);
-    }
     }
     
 }
