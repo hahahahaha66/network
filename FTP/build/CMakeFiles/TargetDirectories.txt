@@ -1,0 +1,4 @@
+/home/hahaha/work/network/FTP/build/CMakeFiles/client.dir
+/home/hahaha/work/network/FTP/build/CMakeFiles/server.dir
+/home/hahaha/work/network/FTP/build/CMakeFiles/edit_cache.dir
+/home/hahaha/work/network/FTP/build/CMakeFiles/rebuild_cache.dir
