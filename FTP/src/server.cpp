@@ -2,7 +2,10 @@
 #include <cerrno>
 #include <cstdio>
 #include <cstdlib>
+#include <future>
 #include <memory>
+#include <netinet/in.h>
+#include <sys/socket.h>
 #include <unistd.h>
  
 void server::set_unlocking(int fd) {
@@ -35,9 +38,10 @@ server::server() {
 
 }
 
-void server::establishing_session(int cliend_fd) {
+void server::establishing_session() {
     while(1){
 
+        int cliend_file = 0;
         char buffer[1024];
         int bytes = recv(cliend_fd,buffer,sizeof(buffer),0);
 
@@ -45,15 +49,16 @@ void server::establishing_session(int cliend_fd) {
             send(cliend_fd,buffer,bytes,0);
             buffer[bytes]='\0';
             if(strcmp(buffer,"PASV") == 0) {
-                printf("--------------------\n");
-                auto ptr = &server::establishing_data_connection;
-                thread th(ptr,cliend_fd);
-                th.join();
+                future<int> result = async(launch::async,&server::establishing_data_connection,this);
+                cliend_file = result.get();
             }
-            else if(strcmp(buffer,"STOR")==0) {
+            else if(strcmp(buffer,"LIST") == 0) {
+
+            }
+            else if(strcmp(buffer,"STOR") == 0) {
                 
             }
-            else if(strcmp(buffer,"RETR")==0) {
+            else if(strcmp(buffer,"RETR") == 0) {
                 
             }
             else {
@@ -76,7 +81,7 @@ void server::establishing_session(int cliend_fd) {
     }
 }
 
-void server::establishing_data_connection(int cliend_fd) {
+int server::establishing_data_connection() {
     int file_fd = socket(AF_INET,SOCK_STREAM,0);
     if(file_fd == -1){
         perror("socket failed");
@@ -86,55 +91,54 @@ void server::establishing_data_connection(int cliend_fd) {
     char pasv_resp[64];
     struct sockaddr_in file_addr;
     
-    int file_port = 0;
-    file_addr.sin_port=htons(file_port);
-    inet_pton(AF_INET,IP,&file_addr.sin_addr);
-    file_addr.sin_family=AF_INET;
-    while(int bind_back = bind(file_fd,(sockaddr*)&file_addr,sizeof(file_addr)) == -1) {
-        perror("bind failed");
-    }
+    random_device rd;
+    mt19937 gen(rd());
+    uniform_int_distribution<int> dis(10000,50000);
 
     
+
+    int file_port=0;
+    do {file_port = dis(gen);
+
+        memset(&file_addr, 0, sizeof(file_addr));
+
+        cout<<file_port<<endl;
+        file_addr.sin_family=AF_INET;
+        inet_pton(AF_INET,IP,&file_addr.sin_addr);
+        file_addr.sin_port=htons(file_port);
+     
+    } while((bind(file_fd,(sockaddr*)&file_addr,sizeof(file_addr)) == -1));
+    
+
     //snprintf(pasv_resp, sizeof(pasv_resp), "227 entering passive mode (127,0,0,1,%d,%d)\r\n",file_port/256,file_port%256);
-    snprintf(pasv_resp, sizeof(pasv_resp), "%d %d\r\n",file_port/256,file_port%256);
+    snprintf(pasv_resp, sizeof(pasv_resp), "%d %d",file_port/256,file_port%256);
+    cout<<pasv_resp<<endl;
     send(cliend_fd,pasv_resp,strlen(pasv_resp),0);
     
-    printf("--------------------\n");
     if(listen(file_fd,10) == -1) {
+        
         perror("listen failed");
         close(file_fd);
         exit(EXIT_FAILURE);
     }
-
+   
     int cliend_file = accept(file_fd,NULL,NULL);
     if(cliend_file == -1) {
         perror("accept failed");
         close(file_fd);
         exit(EXIT_FAILURE);
     }
-
+   
     set_unlocking(cliend_file);
 
-    while(1) {
-        char buffer[4096];
-        memset(buffer,0,sizeof(buffer));
-        int topic_num = recv(cliend_file,buffer,sizeof(buffer),0);
-        ofstream file(buffer,ios::binary | ios::app);
-        memset(buffer,0,sizeof(buffer));
-        int byte_received = 0;
-        while((byte_received=recv(cliend_file, buffer, sizeof(buffer), 0)) > 0){
-            file.write(buffer,byte_received);
-            memset(buffer,0,sizeof(buffer));
-        }
-        if(byte_received == -1){
-            perror("recv failed");
-            close(cliend_fd);
-        }
-        cout<<"file received successfully"<<endl;
-    }
-    close(file_fd);
+    cout<<"The data connection channel was created successfully"<<endl;
+
+    return cliend_file;
 }
 
+server::~server() {
+    close(socket_fd);
+}
 void server::server_accept_with_comminicate() {
     if(listen(socket_fd,10) == -1){
         perror("listen failed");
@@ -172,8 +176,7 @@ void server::server_accept_with_comminicate() {
             }
             else{
                 int temp=event[i].data.fd;
-                auto ptr = &server::establishing_session;
-                thread th(ptr,temp);
+                thread th(&server::establishing_session,this,temp);
                 th.detach();
             }
         }

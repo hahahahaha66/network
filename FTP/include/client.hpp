@@ -15,7 +15,7 @@
 using namespace std;
 
 constexpr char SERVER_IP[] = "127.0.0.1";
-const int PORT = 10000;
+const int PORT = 8081;
 const int BUFFER_SIZE = 1024;
 
 class client {
@@ -25,6 +25,9 @@ public:
   void client_connect();
   void client_control();
   int client_data_connectivity();
+  void client_read_catelog();
+  void client_download_file();
+  void client_upload_file();
   int analysis_port(string port);
 
   int client_sock;

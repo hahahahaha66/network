@@ -1,6 +1,7 @@
 #include "../include/client.hpp"
 #include <cstdio>
 #include <cstring>
+#include <future>
 #include <sstream>
 #include <sys/socket.h>
 
@@ -29,6 +30,7 @@ void client::client_control() {
 
     while(1) {
         string order;
+        int server_file = 0;
         cin>>order;
         memset(buffer,0, sizeof(buffer));
 
@@ -52,40 +54,48 @@ void client::client_control() {
         }
 
         if(order == "PASV") {
-            auto ptr = &client::client_data_connectivity;
-            thread tranfer(ptr);
-            tranfer.join();
+            future<int> result = async(launch::async,&client::client_data_connectivity,this);
+            server_file = result.get();
+        }
+        else if(order == "LIST") {
+            
+        }
+        else if(order == "STOR") {
+
+        }
+        else if(order == "RETR") {
+            
         }
     }
 }
 
 int client::client_data_connectivity() {
     string port_recvived;
-    port_recvived.reserve(128);
-    
-    int byte_recvivied = recv(client_sock,port_recvived.data(),port_recvived.size(),0);
+    port_recvived.resize(128);
 
+    int byte_recvivied = recv(client_sock,port_recvived.data(),port_recvived.size(),0);
+    
     if(byte_recvivied > 0) {
         cout<<"recvived : "<<port_recvived<<endl;
     }
     else {
         cout<<"get port failed"<<endl;
-        perror("recv failed");
+        //perror("recv failed");
         return -1;
     }
     int data_port = analysis_port(port_recvived);
 
-    int sock_data = socket(AF_INET,SOCK_STREAM,0);
+    int server_file = socket(AF_INET,SOCK_STREAM,0);
 
     data_addr.sin_family = AF_INET;
     data_addr.sin_port=htons(data_port);
     inet_pton(AF_INET,SERVER_IP,&data_addr.sin_addr);
 
-    if(connect(sock_data, (struct sockaddr*)&data_addr, sizeof(data_addr)) == -1) {
+    if(connect(server_file, (struct sockaddr*)&data_addr, sizeof(data_addr)) == -1) {
         perror("data transfer connect failed");
     }
     
-    return sock_data;
+    return server_file;
 }
 
 int client::analysis_port(string port) {

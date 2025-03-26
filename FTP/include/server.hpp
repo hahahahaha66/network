@@ -19,13 +19,14 @@
 using namespace std;
 
 constexpr char IP[]="127.0.0.1";
-const int PORT=10000;
+const int PORT=8081;
 const int MAX_EVENT=10;
 
 
 class server{
     public:
     int socket_fd;
+    int cliend_fd;
     struct sockaddr_in sock_addr;
     int epfd;
     struct epoll_event ev, event[MAX_EVENT];
@@ -33,6 +34,9 @@ class server{
     ~server();
     void server_accept_with_comminicate();
     void set_unlocking(int fd);
-    void establishing_session(int client_fd); 
-    void establishing_data_connection(int client_fd);
+    void establishing_session(); 
+    int establishing_data_connection();
+    void server_read_catelog();
+    void server_download_file();
+    void server_upload_file();
 };
