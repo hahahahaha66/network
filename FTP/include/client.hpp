@@ -15,7 +15,7 @@
 using namespace std;
 
 constexpr char SERVER_IP[] = "127.0.0.1";
-const int PORT = 8081;
+const int PORT = 8080;
 const int BUFFER_SIZE = 1024;
 
 class client {

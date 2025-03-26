@@ -20,13 +20,14 @@
 using namespace std;
 
 constexpr char IP[]="127.0.0.1";
-const int PORT=8081;
+const int PORT=8080;
 const int MAX_EVENT=10;
 
 
 class server{
     public:
     int socket_fd;
+    int cliend_file;
     struct sockaddr_in sock_addr;
     int epfd;
     struct epoll_event ev, event[MAX_EVENT];
@@ -36,9 +37,9 @@ class server{
     void set_unlocking(int fd);
     void establishing_session(int cliend_fd); 
     int establishing_data_connection(int cliend_fd);
-    void server_read_catelog(int data_fd,vector<string> result);
-    void server_download_file(int data_fd,vector<string> result);
-    void server_upload_file(int data_fd,vector<string> result);
+    void server_read_catelog(int cliend_fd,int data_fd);
+    void server_download_file(int data_fd);
+    void server_upload_file(int data_fd);
     vector<string> split(string order);
-    void printf_permission(filesystem::directory_entry path);
+    string printf_permission(filesystem::directory_entry path);
 };

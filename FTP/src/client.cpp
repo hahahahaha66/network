@@ -30,21 +30,16 @@ void client::client_control() {
 
     while(1) {
         string order;
-        vector<string> result;
         
         cin>>order;
       
-        result=split(order);
-
         memset(buffer,0, sizeof(buffer));
 
-        if(result[0] == "q" || result[0] == "quit") {
+        if(order == "q" || order == "quit") {
             shutdown(client_sock, SHUT_WR);
         }
 
-    
         if(order.size() > 0){
-
             send(client_sock, order.c_str(), order.size(), 0);
         }
 
@@ -59,11 +54,11 @@ void client::client_control() {
             cout<<"server recvived : "<<buffer<<endl;
         }
 
-        if(result[0] == "PASV") {
+        if(order == "PASV") {
             future<int> result = async(launch::async,&client::client_data_connectivity,this);
             server_file = result.get();
         }
-        else if(result[0] == "LIST") {
+        else if(order == "LIST") {
             if(server_file == 0) {
                 cout<<"data connection channel not established"<<endl;
                 continue;
@@ -72,7 +67,7 @@ void client::client_control() {
             thread read_dir(&client::client_read_catelog,this,server_file);
             read_dir.detach();
         }
-        else if(result[0] == "STOR") {
+        else if(order == "STOR") {
             if(server_file == 0) {
                 cout<<"data connection channel not established"<<endl;
                 continue;
@@ -81,7 +76,7 @@ void client::client_control() {
             thread upload_file(&client::client_upload_file,this,server_file);
             upload_file.detach();
         }
-        else if(result[0] == "RETR") {
+        else if(order == "RETR") {
             if(server_file == 0) {
                 cout<<"data connection channel not established"<<endl;
                 continue;
@@ -93,21 +88,17 @@ void client::client_control() {
     }
 }
 
-vector<string> client::split(string order) {
-    vector<string> result;
-    int start = 0, end;
-    
-    while((end = order.find(' ',start)) != string::npos) {
-        result.push_back(order.substr(start,end-start));
-        start = end+1;
-    }
-
-    result.push_back(order.substr(start));
-    return result;
-}
-
 void client::client_read_catelog(int server_file) {
-    
+    string catelog;
+    catelog.resize(1024);
+    int bytes = recv(server_file,catelog.data(),catelog.size(),0);
+    if(bytes > 0) {
+        cout<<catelog;
+    }
+    else {
+        cout<<"Data transfer failed"<<endl;
+        return ;
+    }
 }
 
 void client::client_download_file(int server_file) {

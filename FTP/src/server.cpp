@@ -7,6 +7,7 @@
 #include <future>
 #include <memory>
 #include <netinet/in.h>
+#include <sstream>
 #include <sys/socket.h>
 #include <unistd.h>
  
@@ -18,7 +19,10 @@ void server::set_unlocking(int fd) {
 }
 
 server::server() {
+    int opt = 1;
     socket_fd = socket(AF_INET,SOCK_STREAM,0);
+    setsockopt(socket_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+    cliend_file = 0;
     if(socket_fd == -1) {
         perror("socket failed");
         exit(EXIT_FAILURE);
@@ -41,35 +45,50 @@ server::server() {
 }
 
 void server::establishing_session(int cliend_fd) {
-    int cliend_file = 0;
-    
+
     while(1){
         string order;
-        vector<string> result;
         order.resize(128);
-        int bytes = recv(cliend_fd,order.data(),order.size(),0);
         
+        int bytes = recv(cliend_fd,order.data(),order.size(),0);
         if(bytes > 0) {
+
+            order.resize(bytes); // 修正字符串长度
+            order.erase(order.find_last_not_of("\r\n") + 1); // 去除换行符
+            cout << "Received order: " << order << endl;
+
             send(cliend_fd,order.data(),bytes,0);
-            result = split(order);
-            if(result[0] == "PASV") {
+
+            if(order == "PASV") {
                 future<int> result = async(launch::async,&server::establishing_data_connection,this,cliend_fd);
                 cliend_file = result.get();
             }
-            else if(result[0] == "LIST") {
-                thread read_dir(&server::server_read_catelog,this,cliend_file,result);
-                read_dir.detach();
+            else if(order == "LIST") {
+                if(cliend_file == 0) {
+                    cout<<"data connection channel not established"<<endl;
+                    continue;
+                }
+
+                thread read_dir(&server::server_read_catelog,this,cliend_fd,cliend_file);
+                read_dir.join();
             }
-            else if(result[0] == "STOR") {
-                thread upload_file(&server::server_upload_file,this,cliend_file,result);
+            else if(order == "STOR") {
+                if(cliend_file == 0) {
+                    cout<<"data connection channel not established"<<endl;
+                    continue;
+                }
+
+                thread upload_file(&server::server_upload_file,this,cliend_file);
                 upload_file.detach();
             }
-            else if(result[0] == "RETR") {
-                thread download_file(&server::server_download_file,this,cliend_file,result);
+            else if(order == "RETR") {
+                if(cliend_file == 0) {
+                    cout<<"data connection channel not established"<<endl;
+                    continue;
+                }
+
+                thread download_file(&server::server_download_file,this,cliend_file);
                 download_file.detach();
-            }
-            else {
-                cout<<order<<endl;
             }
         }
         else if(bytes == -1 && errno == EAGAIN) {
@@ -89,75 +108,97 @@ void server::establishing_session(int cliend_fd) {
     }
 }
 
-vector<string> server::split(string order) {
-    vector<string> result;
-    int start = 0, end;
-    
-    while((end = order.find(' ',start)) != string::npos) {
-        result.push_back(order.substr(start,end-start));
-        start = end+1;
-    }
 
-    result.push_back(order.substr(start));
-    return result;   
-}
-
-void server::printf_permission(filesystem::directory_entry path) {
+string server::printf_permission(filesystem::directory_entry path) {
+    ostringstream oss;
     try {
         filesystem::file_status filestatus = path.status();
         filesystem::perms permissions = filestatus.permissions();
-        std::cout << std::oct << (static_cast<int>(permissions) & static_cast<int>(filesystem::perms::owner_read) ? 'r' : '-') // 用户读取权限
-          << (static_cast<int>(permissions) & static_cast<int>(filesystem::perms::owner_write) ? 'w' : '-') // 用户写入权限
-          << (static_cast<int>(permissions) & static_cast<int>(filesystem::perms::owner_exec) ? 'x' : '-')   // 用户执行权限
-          << (static_cast<int>(permissions) & static_cast<int>(filesystem::perms::group_read) ? 'r' : '-')   // 组读取权限
-          << (static_cast<int>(permissions) & static_cast<int>(filesystem::perms::group_write) ? 'w' : '-')  // 组写入权限
-          << (static_cast<int>(permissions) & static_cast<int>(filesystem::perms::group_exec) ? 'x' : '-')    // 组执行权限
-          << (static_cast<int>(permissions) & static_cast<int>(filesystem::perms::others_read) ? 'r' : '-')  // 其他用户读取权限
-          << (static_cast<int>(permissions) & static_cast<int>(filesystem::perms::others_write) ? 'w' : '-') // 其他用户写入权限
-          << (static_cast<int>(permissions) & static_cast<int>(filesystem::perms::others_exec) ? 'x' : '-')   // 其他用户执行权限
-          <<' ';
+
+        oss << (static_cast<int>(permissions) & static_cast<int>(filesystem::perms::owner_read)  ? 'r' : '-')
+            << (static_cast<int>(permissions) & static_cast<int>(filesystem::perms::owner_write) ? 'w' : '-')
+            << (static_cast<int>(permissions) & static_cast<int>(filesystem::perms::owner_exec)  ? 'x' : '-')
+            << (static_cast<int>(permissions) & static_cast<int>(filesystem::perms::group_read)  ? 'r' : '-')
+            << (static_cast<int>(permissions) & static_cast<int>(filesystem::perms::group_write) ? 'w' : '-')
+            << (static_cast<int>(permissions) & static_cast<int>(filesystem::perms::group_exec)  ? 'x' : '-')
+            << (static_cast<int>(permissions) & static_cast<int>(filesystem::perms::others_read) ? 'r' : '-')
+            << (static_cast<int>(permissions) & static_cast<int>(filesystem::perms::others_write)? 'w' : '-')
+            << (static_cast<int>(permissions) & static_cast<int>(filesystem::perms::others_exec) ? 'x' : '-');
     }
     catch(const filesystem::filesystem_error &e) {
         cerr<<"Error: "<<e.what()<<endl;
     }
-    return ;
+    return oss.str();
 }
 
-void server::server_read_catelog(int cliend_file,vector<string> result) {
-    std::filesystem::path work_path;
+void server::server_read_catelog(int cliend_fd,int cliend_file) {
+    string path;
+    string message;
     string write_buffer;
+    bool aaa = false;
+
+    path.resize(128);
+    std::filesystem::path work_path;
     write_buffer.resize(1024);
-    if(result.size() == 1) {
-        std::filesystem::path work_path=std::filesystem::current_path();
+
+    while(1) {
+        int bytes = recv(cliend_fd,path.data(),path.size(),0);
+        if(bytes > 0) {
+            aaa = true;
+            break;
+        }
+        else if(bytes == -1 && errno == EAGAIN) {
+            break;
+        }
+        else if(bytes == -1 && errno != EAGAIN) {
+            cout<<"a error occured ..."<<endl<<"actively disconnect"<<endl;
+            cout<<strerror(errno);
+            close(cliend_fd);
+            break;
+        }
+    }
+    if(!aaa) {
+        work_path = std::filesystem::current_path();
     }
     else {
-        work_path = result[1];
+        work_path = path;
     }
     try {
         for(const auto &entry : filesystem::directory_iterator(work_path)) {
-            printf_permission(entry);
+            ostringstream oss;
 
-            cout<<entry.file_size()<<' ';
+            message = message + printf_permission(entry);
+
+            if(!entry.is_directory()) {
+                oss<<entry.file_size()<<' ';
+            }
 
             auto file_time = entry.last_write_time();
             auto sctp = std::chrono::time_point_cast<chrono::system_clock::duration>(file_time - filesystem::file_time_type::clock::now() + std::chrono::system_clock::now());
             time_t cftime = chrono::system_clock::to_time_t(sctp);
 
-            cout<<ctime(&cftime)<<' ';
-            cout<<entry.path().filename()<<endl;
+            oss<<ctime(&cftime)<<' ';
+            oss<<entry.path().filename()<<endl;
+
+            message = message + oss.str();
+            
         }
     }
     catch (const filesystem::filesystem_error &e) {
         std::cerr << "Error: " << e.what() << std::endl;
+        
     }
+    cout<<message;
+
+    send(cliend_file,message.data(),message.size(),0);
     return ;
 }
 
-void server::server_upload_file(int cliend_file,vector<string> result) {
+void server::server_upload_file(int cliend_file) {
 
 }
 
-void server::server_download_file(int cliend_file,vector<string> result) {
+void server::server_download_file(int cliend_file) {
 
 }
 
