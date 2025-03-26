@@ -10,6 +10,7 @@
 #include <string.h>
 #include <sys/epoll.h>
 #include <sys/socket.h>
+#include <filesystem>
 #include <thread>
 #include <unistd.h>
 #include <sys/stat.h>
@@ -26,7 +27,6 @@ const int MAX_EVENT=10;
 class server{
     public:
     int socket_fd;
-    int cliend_fd;
     struct sockaddr_in sock_addr;
     int epfd;
     struct epoll_event ev, event[MAX_EVENT];
@@ -34,9 +34,11 @@ class server{
     ~server();
     void server_accept_with_comminicate();
     void set_unlocking(int fd);
-    void establishing_session(); 
-    int establishing_data_connection();
-    void server_read_catelog();
-    void server_download_file();
-    void server_upload_file();
+    void establishing_session(int cliend_fd); 
+    int establishing_data_connection(int cliend_fd);
+    void server_read_catelog(int data_fd,vector<string> result);
+    void server_download_file(int data_fd,vector<string> result);
+    void server_upload_file(int data_fd,vector<string> result);
+    vector<string> split(string order);
+    void printf_permission(filesystem::directory_entry path);
 };

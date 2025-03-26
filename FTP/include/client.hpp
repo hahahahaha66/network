@@ -25,11 +25,11 @@ public:
   void client_connect();
   void client_control();
   int client_data_connectivity();
-  void client_read_catelog();
-  void client_download_file();
-  void client_upload_file();
+  void client_read_catelog(int data_fd);
+  void client_download_file(int data_fd);
+  void client_upload_file(int data_fd);
   int analysis_port(string port);
-
+  vector<string> split(string order);
   int client_sock;
   struct sockaddr_in data_addr;
   struct sockaddr_in server_addr;
