@@ -26,8 +26,8 @@ public:
   void client_control();
   int client_data_connectivity();
   void client_read_catelog(int data_fd);
-  void client_download_file(int data_fd);
-  void client_upload_file(int data_fd);
+  void client_download_file(int data_fd,vector<string> result);
+  void client_upload_file(int data_fd,vector<string> result);
   int analysis_port(string port);
   vector<string> split(string order);
   int client_sock;

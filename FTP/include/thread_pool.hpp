@@ -16,10 +16,25 @@ const int MAX_NUM = 12;
 class thread_pool {
 public:
     thread_pool();
+    
     ~thread_pool();
 
-    template<typename Func>
-    auto push_task(Func func) -> std::future<decltype(func())>;
+    template<typename T,typename Func,typename... Args>
+    auto push_task(Func T::*func, T* obj, Args&&... args) 
+    -> std::future<typename std::invoke_result<Func T::*, T&, Args...>::type> {
+        using ReturnType = typename std::invoke_result<Func T::*, T&, Args...>::type;
+
+        auto task = std::make_shared<std::packaged_task<ReturnType()>>(
+            std::bind(func, obj, std::forward<Args>(args)...)
+        );
+        std::future<ReturnType> result = task->get_future();
+        {
+            std::unique_lock<std::mutex> lock(mutex);
+            workqueue.push([task]() { (*task)(); });
+        }
+        cond_work.notify_one();
+        return result;
+    }
 
 private:
     void work();

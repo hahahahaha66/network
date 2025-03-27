@@ -1,9 +1,11 @@
 #include "../include/server.hpp"
+
 #include <cerrno>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
+#include <fstream>
 #include <future>
 #include <memory>
 #include <netinet/in.h>
@@ -42,6 +44,7 @@ server::server() {
 
     epfd = epoll_create(1);
 
+    thread_pool pool;
 }
 
 void server::establishing_session(int cliend_fd) {
@@ -54,16 +57,16 @@ void server::establishing_session(int cliend_fd) {
 
         if(bytes > 0) {
 
-            order.resize(bytes); // 修正字符串长度
-            order.erase(order.find_last_not_of("\r\n") + 1); // 去除换行符
+            order.resize(bytes); 
+            order.erase(order.find_last_not_of("\r\n") + 1); 
             cout << "Received order: " << order << endl;
             result = split(order);
 
             send(cliend_fd,order.data(),bytes,0);
 
             if(result[0] == "PASV" && result.size() == 1) {
-                future<int> result = async(launch::async,&server::establishing_data_connection,this,cliend_fd);
-                cliend_file = result.get();
+                future<int> back = pool.push_task(&server::establishing_data_connection,this,cliend_fd);
+                cliend_file = (int)back.get();
             }
             else if(result[0] == "LIST") {
                 if(cliend_file == 0) {
@@ -74,9 +77,8 @@ void server::establishing_session(int cliend_fd) {
                     cout<<"order wrong"<<endl;
                     continue;
                 }
-
-                thread read_dir(&server::server_read_catelog,this,cliend_fd,cliend_file,result);
-                read_dir.detach();
+                
+                pool.push_task(&server::server_read_catelog,this,cliend_fd,cliend_file,result);
             }
             else if(result[0] == "STOR") {
                 if(cliend_file == 0) {
@@ -84,8 +86,7 @@ void server::establishing_session(int cliend_fd) {
                     continue;
                 }
 
-                thread upload_file(&server::server_upload_file,this,cliend_file);
-                upload_file.detach();
+                pool.push_task(&server::server_upload_file, this, cliend_file, result);
             }
             else if(result[0] == "RETR") {
                 if(cliend_file == 0) {
@@ -93,8 +94,7 @@ void server::establishing_session(int cliend_fd) {
                     continue;
                 }
 
-                thread download_file(&server::server_download_file,this,cliend_file);
-                download_file.detach();
+                pool.push_task(&server::server_download_file, this, cliend_file, result);
             }
         }
         else if(bytes == -1 && errno == EAGAIN) {
@@ -194,12 +194,71 @@ void server::server_read_catelog(int cliend_fd,int cliend_file,vector<string> re
     return ;
 }
 
-void server::server_upload_file(int cliend_file) {
+void server::server_upload_file(int cliend_file,vector<string> result) {
+    char buffer[1024];
+    int file_size;
+    ofstream file(result[1],ios::binary);
+    if(!file) {
+        cout<<"unable to create file"<<endl;
+        return;
+    }
 
+    while(true) {
+        int recevied_bytes = recv(cliend_file,&file_size,sizeof(file_size),0);\
+        if(recevied_bytes > 0) {
+            break;
+        }
+        else if(recevied_bytes == -1 && errno == EAGAIN) {
+            continue;
+        }
+    }
+    
+    if(file_size == -1) {
+        filesystem::remove(result[1]);
+        return ;
+    }
+
+    int total_received = 0;
+
+    while(total_received < file_size) {
+        int bytes = recv(cliend_file,buffer,sizeof(buffer),0);
+        if(bytes == -1 && errno == EAGAIN) {
+            continue;
+        }
+
+        file.write(buffer, bytes);
+        total_received += bytes;
+        memset(buffer, 0, sizeof(buffer));
+    }
+ 
+    cout<<"file acceptance completed"<<endl;
+    return ;
 }
 
-void server::server_download_file(int cliend_file) {
+void server::server_download_file(int cliend_file,vector<string> result) {
+    char buffer[1024];
+    ifstream file(result[1],ios::binary);
+    if(!file) {
+        cout<<"Unable to open file"<<endl;
+        return ;
+    }
 
+    file.seekg(0,ios::end);
+    int file_size = file.tellg();
+    file.seekg(0,ios::beg);
+
+    send(cliend_file,&file_size,sizeof(file_size),0);
+    while(file.read(buffer,sizeof(buffer))) {
+        send(cliend_file,buffer,file.gcount(),0);
+        memset(buffer, 0, sizeof(buffer));
+    }
+
+    if (file.gcount() > 0) {
+        send(cliend_file,buffer,file.gcount(),0);
+    }
+
+    cout<<"file sending completed"<<endl;
+    return ;
 }
 
 int server::establishing_data_connection(int cliend_fd) {
@@ -296,8 +355,9 @@ void server::server_accept_with_comminicate() {
             }
             else{
                 int temp=event[i].data.fd;
-                thread th(&server::establishing_session,this,temp);
-                th.detach();
+                pool.push_task(&server::establishing_session,this,temp);
+                // thread th(&server::establishing_session,this,temp);
+                // th.detach();
             }
         }
     }

@@ -16,6 +16,8 @@
 #include <sys/stat.h>
 #include <dirent.h>
 #include <sys/epoll.h>
+#include <vector>
+#include "../include/thread_pool.hpp"
 
 using namespace std;
 
@@ -31,15 +33,16 @@ class server{
     struct sockaddr_in sock_addr;
     int epfd;
     struct epoll_event ev, event[MAX_EVENT];
+    thread_pool pool;
     server();
     ~server();
     void server_accept_with_comminicate();
     void set_unlocking(int fd);
     void establishing_session(int cliend_fd); 
     int establishing_data_connection(int cliend_fd);
-    void server_read_catelog(int cliend_fd,int data_fd,vector<string>);
-    void server_download_file(int data_fd);
-    void server_upload_file(int data_fd);
+    void server_read_catelog(int cliend_fd,int data_fd,vector<string> result);
+    void server_download_file(int data_fd,vector<string> result);
+    void server_upload_file(int data_fd,vector<string> result);
     vector<string> split(string order);
     string printf_permission(filesystem::directory_entry path);
 };

@@ -1,6 +1,7 @@
 #include "../include/client.hpp"
 #include <cstdio>
 #include <cstring>
+#include <fstream>
 #include <future>
 #include <sstream>
 #include <string>
@@ -40,8 +41,11 @@ void client::client_control() {
             shutdown(client_sock, SHUT_WR);
         }
 
-        if(order.size() > 0){
+        if(!order.empty()){
             send(client_sock, order.data(), order.size(), 0);
+        }
+        else {
+            continue;
         }
 
         int bytes_received = recv(client_sock,buffer, sizeof(buffer), 0);
@@ -78,7 +82,7 @@ void client::client_control() {
                 continue;
             }
 
-            thread upload_file(&client::client_upload_file,this,server_file);
+            thread upload_file(&client::client_upload_file,this,server_file,result);
             upload_file.detach();
         }
         else if(result[0] == "RETR") {
@@ -87,7 +91,7 @@ void client::client_control() {
                 continue;
             }
 
-            thread download_file(&client::client_download_file,this,server_file);
+            thread download_file(&client::client_download_file,this,server_file,result);
             download_file.detach();
         }
     }
@@ -119,12 +123,69 @@ void client::client_read_catelog(int server_file) {
     }
 }
 
-void client::client_download_file(int server_file) {
+void client::client_download_file(int server_file,vector<string> result) {
+    char buffer[1024];
+    int file_size;
+    ofstream file(result[1],ios::binary);
+    if(!file) {
+        cout<<"unable to create file"<<endl;
+        return;
+    }
+
+    while(true) {
+        int recevied_bytes = recv(server_file,&file_size,sizeof(file_size),0);
+        if(recevied_bytes > 0) {
+            break;
+        }
+        else if(recevied_bytes == -1 && errno == EAGAIN) {
+            continue;
+        }
+    }
     
+    cout<<file_size<<endl;
+    int total_received = 0;
+
+    while(total_received < file_size) {
+        int bytes = recv(server_file,buffer,sizeof(buffer),0);
+        if(bytes == -1 && errno == EAGAIN) {
+            continue;
+        }
+
+        file.write(buffer, bytes);
+        total_received += bytes;
+        memset(buffer, 0, sizeof(buffer));
+    }
+ 
+    cout<<"file acceptance completed"<<endl;
+    return ;
 }
 
-void client::client_upload_file(int server_file) {
+void client::client_upload_file(int server_file,vector<string> result) {
+    char buffer[1024];
+    ifstream file(result[1],ios::binary);
+    if(!file) {
+        cout<<"Unable to open file"<<endl;
+        int i = -1;
+        send(server_file,&i,sizeof(i),0);
+        return ;
+    }
 
+    file.seekg(0,ios::end);
+    int file_size = file.tellg();
+    file.seekg(0,ios::beg);
+
+    send(server_file,&file_size,sizeof(file_size),0);
+    while(file.read(buffer, sizeof(buffer))) {
+        send(server_file,buffer,file.gcount(),0);
+        memset(buffer, 0, sizeof(buffer));
+    }
+
+    if (file.gcount() > 0) {
+        send(server_file, buffer, file.gcount(), 0);
+    }
+
+    cout<<"file sending completed"<<endl;
+    return ;
 }
 
 int client::client_data_connectivity() {

@@ -3,6 +3,7 @@
 #include "../include/thread_pool.hpp"
 #include <iostream>
 #include <memory>
+#include <utility>
 
 thread_pool::thread_pool() : stop(false) {
     for (int i = 0; i < MAX_NUM; i++) {
@@ -35,18 +36,4 @@ void thread_pool::work() {
         }
         task();
     }
-}
-
-template<typename Func>
-auto thread_pool::push_task(Func func) -> std::future<decltype(func())> {
-    using ReturnType = decltype(func());
-
-    auto task = std::make_shared<std::packaged_task<ReturnType()>>(std::forward<Func>(func));
-    std::future<ReturnType> result = task->get_future();
-    {
-        std::unique_lock<std::mutex> lock(mutex);
-        workqueue.push([task]() { (*task)(); });
-    }
-    cond_work.notify_one();
-    return result;
 }
