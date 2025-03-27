@@ -37,7 +37,7 @@ class server{
     void set_unlocking(int fd);
     void establishing_session(int cliend_fd); 
     int establishing_data_connection(int cliend_fd);
-    void server_read_catelog(int cliend_fd,int data_fd);
+    void server_read_catelog(int cliend_fd,int data_fd,vector<string>);
     void server_download_file(int data_fd);
     void server_upload_file(int data_fd);
     vector<string> split(string order);

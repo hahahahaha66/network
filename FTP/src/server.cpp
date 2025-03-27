@@ -48,31 +48,37 @@ void server::establishing_session(int cliend_fd) {
 
     while(1){
         string order;
+        vector<string> result;
         order.resize(128);
-        
         int bytes = recv(cliend_fd,order.data(),order.size(),0);
+
         if(bytes > 0) {
 
             order.resize(bytes); // 修正字符串长度
             order.erase(order.find_last_not_of("\r\n") + 1); // 去除换行符
             cout << "Received order: " << order << endl;
+            result = split(order);
 
             send(cliend_fd,order.data(),bytes,0);
 
-            if(order == "PASV") {
+            if(result[0] == "PASV" && result.size() == 1) {
                 future<int> result = async(launch::async,&server::establishing_data_connection,this,cliend_fd);
                 cliend_file = result.get();
             }
-            else if(order == "LIST") {
+            else if(result[0] == "LIST") {
                 if(cliend_file == 0) {
                     cout<<"data connection channel not established"<<endl;
                     continue;
                 }
+                if(result.size() > 2) {
+                    cout<<"order wrong"<<endl;
+                    continue;
+                }
 
-                thread read_dir(&server::server_read_catelog,this,cliend_fd,cliend_file);
-                read_dir.join();
+                thread read_dir(&server::server_read_catelog,this,cliend_fd,cliend_file,result);
+                read_dir.detach();
             }
-            else if(order == "STOR") {
+            else if(result[0] == "STOR") {
                 if(cliend_file == 0) {
                     cout<<"data connection channel not established"<<endl;
                     continue;
@@ -81,7 +87,7 @@ void server::establishing_session(int cliend_fd) {
                 thread upload_file(&server::server_upload_file,this,cliend_file);
                 upload_file.detach();
             }
-            else if(order == "RETR") {
+            else if(result[0] == "RETR") {
                 if(cliend_file == 0) {
                     cout<<"data connection channel not established"<<endl;
                     continue;
@@ -108,6 +114,18 @@ void server::establishing_session(int cliend_fd) {
     }
 }
 
+vector<string> server::split(string order) {
+    std::vector<std::string> result; 
+    size_t start = 0, end; 
+
+    while ((end = order.find(' ', start)) != std::string::npos) {  
+        result.push_back(order.substr(start, end - start)); 
+        start = end + 1; 
+    }
+
+    result.push_back(order.substr(start)); 
+    return result;
+}
 
 string server::printf_permission(filesystem::directory_entry path) {
     ostringstream oss;
@@ -123,7 +141,8 @@ string server::printf_permission(filesystem::directory_entry path) {
             << (static_cast<int>(permissions) & static_cast<int>(filesystem::perms::group_exec)  ? 'x' : '-')
             << (static_cast<int>(permissions) & static_cast<int>(filesystem::perms::others_read) ? 'r' : '-')
             << (static_cast<int>(permissions) & static_cast<int>(filesystem::perms::others_write)? 'w' : '-')
-            << (static_cast<int>(permissions) & static_cast<int>(filesystem::perms::others_exec) ? 'x' : '-');
+            << (static_cast<int>(permissions) & static_cast<int>(filesystem::perms::others_exec) ? 'x' : '-')
+            <<' ';
     }
     catch(const filesystem::filesystem_error &e) {
         cerr<<"Error: "<<e.what()<<endl;
@@ -131,37 +150,19 @@ string server::printf_permission(filesystem::directory_entry path) {
     return oss.str();
 }
 
-void server::server_read_catelog(int cliend_fd,int cliend_file) {
-    string path;
+void server::server_read_catelog(int cliend_fd,int cliend_file,vector<string> result) {
     string message;
     string write_buffer;
-    bool aaa = false;
 
-    path.resize(128);
     std::filesystem::path work_path;
     write_buffer.resize(1024);
 
-    while(1) {
-        int bytes = recv(cliend_fd,path.data(),path.size(),0);
-        if(bytes > 0) {
-            aaa = true;
-            break;
-        }
-        else if(bytes == -1 && errno == EAGAIN) {
-            break;
-        }
-        else if(bytes == -1 && errno != EAGAIN) {
-            cout<<"a error occured ..."<<endl<<"actively disconnect"<<endl;
-            cout<<strerror(errno);
-            close(cliend_fd);
-            break;
-        }
-    }
-    if(!aaa) {
+    
+    if(result.size() == 1) {
         work_path = std::filesystem::current_path();
     }
     else {
-        work_path = path;
+        work_path = result[1];
     }
     try {
         for(const auto &entry : filesystem::directory_iterator(work_path)) {
@@ -188,7 +189,6 @@ void server::server_read_catelog(int cliend_fd,int cliend_file) {
         std::cerr << "Error: " << e.what() << std::endl;
         
     }
-    cout<<message;
 
     send(cliend_file,message.data(),message.size(),0);
     return ;
